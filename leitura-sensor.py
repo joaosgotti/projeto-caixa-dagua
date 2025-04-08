@@ -35,21 +35,43 @@ def medir_distancia():
     distancia = pulse_duration * 17150
     return round(distancia, 2)
 
-def check_saude_sensor(distancia):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT
-    conn.commit()
-    conn.close()
-    return True
+# Verifica a saude do dado
+def dado_saudavel(distancia, media_5_ultimas):
+    if media_5_ultimas is None or distancia is None:
+        return False
+
+    margem = 0.2
+    limite_superior = media_5_ultimas * (1 + margem)
+    limite_inferior = media_5_ultimas * (1 - margem)
+    
+    return limite_inferior <= distancia <= limite_superior
+
 
 # Função para salvar no banco de dados
 def salvar_no_bd(distancia):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("INSERT INTO leituras (timestamp, distancia) VALUES (?, ?)", (timestamp, distancia))
-    conn.commit()
+
+    cursor.execute("""
+        SELECT AVG(distancia)
+        FROM (
+            SELECT distancia
+            FROM leituras
+            ORDER BY timestamp DESC
+            LIMIT 5
+        )
+    """)
+
+    media_5_ultimas = cursor.fetchone()[0]
+
+    if dado_saudavel(distancia, media_5_ultimas):
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("INSERT INTO leituras (timestamp, distancia) VALUES (?, ?)", (timestamp, distancia))
+        conn.commit()
+
+    else:
+        print(f"Distância {distancia:.2f} ignorada (fora de 20% da média {media_5_ultimas:.2f})")
+    
     conn.close()
 
 # Criando a tabela no banco de dados
